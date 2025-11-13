@@ -25,14 +25,17 @@ At a glance the automation agent provides:
   local storage.
 * Structured logging and dashboard endpoints to surface task progress in real
   time.
+* Optional Git-based snapshots that version control collected artefacts.
 
 Quick Start
 -----------
-1. Ensure Python 3.10+ is installed and activate a virtual environment if
-   desired.
+1. Ensure Python 3.10+ and Git are installed and activate a virtual environment
+   if desired.
 2. Copy `config/infrastructure_agent.yml` and customise collectors, vault, and
    backup targets to match your environment.
-3. Export a base64-encoded 32-byte key for the vault encryption layer:
+3. Optionally set `INFRA_AGENT_WORKDIR` to the directory where artefacts and Git
+   history should be stored (defaults to `./tmp/infrastructure_agent`).
+4. Export a base64-encoded 32-byte key for the vault encryption layer:
 
        export INFRA_AGENT_VAULT_KEY="$(python - <<'PY'
 from secrets import token_bytes
@@ -41,7 +44,7 @@ print(base64.b64encode(token_bytes(32)).decode())
 PY
 )"
 
-4. Launch the agent with your configuration:
+5. Launch the agent with your configuration:
 
        python -m infrastructure_agent.cli --config config/infrastructure_agent.yml
 
@@ -64,12 +67,14 @@ can optionally expose an embedded HTTP dashboard for observability.
   them to disk.
 * Backup targets that archive configurable directories or files to rotation-friendly local storage.
 * Structured logging and a JSON dashboard endpoint to follow agent progress step-by-step.
+* Git-based version control snapshots that capture generated artefacts for auditing.
 
 ### Quick start
 
-1. Ensure Python 3.10+ is available (a virtual environment is recommended for development).
+1. Ensure Python 3.10+ and Git are available (a virtual environment is recommended for development).
 2. Copy `config/infrastructure_agent.yml` and tailor the collectors, vault, and backup sections to your infrastructure.
-3. Export a base64-encoded 32-byte key for the vault, for example:
+3. Optionally set `INFRA_AGENT_WORKDIR` to the desired working directory for artefacts and Git state.
+4. Export a base64-encoded 32-byte key for the vault, for example:
 
        export INFRA_AGENT_VAULT_KEY="$(python - <<'PY'
 from secrets import token_bytes
@@ -78,7 +83,7 @@ print(base64.b64encode(token_bytes(32)).decode())
 PY
 )"
 
-4. Run the agent:
+5. Run the agent:
 
        python -m infrastructure_agent.cli --config config/infrastructure_agent.yml
 
@@ -89,13 +94,16 @@ Use `--dump-status` to print a complete status snapshot to STDOUT when the run c
 
 The sample configuration demonstrates the supported keys:
 
-* `runtime` – Defines the working directory for generated files, the log destination, and optional dashboard host/port values.
+* `runtime` – Defines the working directory for generated files, the log destination, and optional dashboard host/port values.  Paths
+  expand environment variables and may be relative to the agent's current working directory.
 * `inventory.collectors` – Ordered list of discovery plugins.  The built-in `environment` collector exports specific variables,
   while the `host` collector captures the hostname and platform data.
 * `vault` – Enables secret storage, selects the filename for encrypted data, and specifies the environment variable that carries
   the encryption key (base64 encoding is supported out of the box).
 * `backups.targets` – Declares backup destinations.  The provided `local` target can archive directories into timestamped tarballs
-  and applies configurable retention policies.
+  and applies configurable retention policies.  Relative paths are resolved beneath `runtime.work_dir`.
+* `version_control` – Configures Git snapshots: enablement flag, repository path, tracked paths, commit message template, and
+  commit author identity.
 
 ### Observability and logs
 
@@ -112,11 +120,29 @@ python -m pip install --upgrade pip pytest
 python -m pytest -q
 ```
 
+### Version control snapshots
+
+When `version_control.enabled` is true the agent initialises (or reuses) a Git repository at the configured `repository` path.
+Each run stages the configured `tracked_paths` (defaulting to the working directory) and creates a commit with the provided
+message template.  If nothing has changed since the previous run the step is marked as completed without a commit.  Supplying
+`version_control.user.name` and `.email` avoids Git warnings about missing author information.
+
 ### Container usage
 
-Because the toolkit has no external dependencies, containerising the agent is straightforward: copy the `infrastructure_agent/`
-package and your configuration into an image built from a lightweight Python base, set the `INFRA_AGENT_VAULT_KEY`, and invoke
-the CLI described above as the container's entrypoint.
+Because the toolkit has no external dependencies, containerising the agent is straightforward.  The repository ships with a
+`Dockerfile` that installs Git, copies the Python package, provides the sample configuration, and launches the CLI entry point.
+To build and run the container:
+
+```
+docker build -t infrastructure-agent .
+docker run --rm \
+  -e INFRA_AGENT_VAULT_KEY=base64-encoded-key \
+  -p 8020:8020 \
+  -v $(pwd)/agent-data:/var/lib/infrastructure_agent \
+  infrastructure-agent --config /etc/infrastructure_agent/config.yml --dashboard --dump-status
+```
+
+The bind-mounted `agent-data` directory persists generated artefacts, Git history, and logs between runs.
 
 Usage
 -----

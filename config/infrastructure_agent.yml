@@ -1,5 +1,5 @@
 runtime:
-  work_dir: tmp/infrastructure_agent
+  work_dir: $INFRA_AGENT_WORKDIR
   log_file: log/infrastructure_agent.log
   dashboard:
     host: 0.0.0.0
@@ -26,8 +26,21 @@ backups:
     - type: local
       name: infrastructure-state
       source:
-        - config
-      destination: tmp/infrastructure_agent/backups
+        - inventory
+        - vault.json
+      destination: backups
       archive: true
       retention:
         max_files: 5
+
+version_control:
+  enabled: true
+  repository: .
+  branch: main
+  auto_init: true
+  tracked_paths:
+    - .
+  user:
+    name: Infrastructure Agent
+    email: agent@example.com
+  message: Infrastructure snapshot captured at {timestamp}

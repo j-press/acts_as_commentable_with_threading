@@ -9,6 +9,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /opt/infrastructure_agent
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY infrastructure_agent/ infrastructure_agent/
 RUN mkdir -p /etc/infrastructure_agent
 COPY config/infrastructure_agent.yml ${INFRA_AGENT_CONFIG}
