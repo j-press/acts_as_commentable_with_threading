@@ -1,52 +1,122 @@
 [![Build Status](https://travis-ci.org/elight/acts_as_commentable_with_threading.png)](https://travis-ci.org/elight/acts_as_commentable_with_threading)
 [![Code Climate](https://codeclimate.com/github/elight/acts_as_commentable_with_threading/badges/gpa.svg)](https://codeclimate.com/github/elight/acts_as_commentable_with_threading)
 
-Acts As Commentable (now with comment threads(TM)!!!  -- kidding on the (TM))
-===================
+Infrastructure Automation Toolkit (Python)
+==========================================
 
-Allows for threaded comments to be added to multiple and different models.
-Drop-in compatible for acts_as_commentable (however requiring a database
-schema change)
+The current focus of this repository is a Python-based automation agent that
+scans on-premises infrastructure, snapshots critical artefacts, and records
+everything it discovers into an encrypted vault.  The agent ships with an
+optional HTTP dashboard to surface step-by-step execution details and estimated
+timings so operators can monitor long-running tasks without tailing logs.
 
-Requirements
-------------
-The 2.x version of this gem is for Rails 4 and later versions only.  For the Rails 3.x compatible version of this gem, please use version 1.2.0.
+The toolkit intentionally avoids third-party dependencies to simplify
+distribution across heterogeneous data centre fleets.  Python 3.10 or newer is
+required, and the package can be executed directly or bundled into a Docker
+image for easy deployment on bastion hosts and jump boxes.
 
-This gem depends on CollectiveIdea's Awesome Nested Set gem. It is installed if
-not already present when you install this gem.
+At a glance the automation agent provides:
 
-You can find the gem on GitHub at [collectiveidea/awesome_nested_set]
+* Inventory collectors for environment variables and host facts that export
+  JSON artefacts for downstream tooling.
+* Vault storage that encrypts discovered secrets with a symmetric key supplied
+  via environment variable.
+* Pluggable backup targets that archive files or directories to rotation-aware
+  local storage.
+* Structured logging and dashboard endpoints to surface task progress in real
+  time.
 
-[collectiveidea/awesome_nested_set]: https://github.com/collectiveidea/awesome_nested_set
+Quick Start
+-----------
+1. Ensure Python 3.10+ is installed and activate a virtual environment if
+   desired.
+2. Copy `config/infrastructure_agent.yml` and customise collectors, vault, and
+   backup targets to match your environment.
+3. Export a base64-encoded 32-byte key for the vault encryption layer:
 
-Install
--------
-In your Gemfile, add:
+       export INFRA_AGENT_VAULT_KEY="$(python - <<'PY'
+from secrets import token_bytes
+import base64
+print(base64.b64encode(token_bytes(32)).decode())
+PY
+)"
 
-    gem 'acts_as_commentable_with_threading'
+4. Launch the agent with your configuration:
 
-and run `bundle install`.
+       python -m infrastructure_agent.cli --config config/infrastructure_agent.yml
 
-Migrations
-----------
-* To install from scratch:
+Pass `--dashboard` to expose a JSON status endpoint (default
+`0.0.0.0:8020/status`) and `--dump-status` to print a full run summary when the
+agent exits.
 
-        rails generate acts_as_commentable_with_threading_migration
+---
 
-    This will generate the migration script necessary for the table
+Toolkit Details
+---------------
+The following sections dive deeper into the Python automation toolkit, covering configuration options, observability features,
+testing guidance, and container packaging tips.  It is designed to run on any host that has Python 3.10 or newer available and
+can optionally expose an embedded HTTP dashboard for observability.
 
-* To upgrade to acts_as_commentable_with_threading from the
-  old acts_as_commentable:
+### Features
 
-        rails generate acts_as_commentable_upgrade_migration
+* Inventory collectors for environment variables and basic host facts stored under `inventory/` in the working directory.
+* A minimal vault service that encrypts secrets with a symmetric key sourced from an environment variable before persisting
+  them to disk.
+* Backup targets that archive configurable directories or files to rotation-friendly local storage.
+* Structured logging and a JSON dashboard endpoint to follow agent progress step-by-step.
 
-    This will generate the necessary migration to upgrade your comments
-    table to work with acts_as_commentable_with_threading
+### Quick start
 
-If the generators fail, you can just as easily create the migrations by hand.
-See the templates in the generators under [`lib/generators`].
+1. Ensure Python 3.10+ is available (a virtual environment is recommended for development).
+2. Copy `config/infrastructure_agent.yml` and tailor the collectors, vault, and backup sections to your infrastructure.
+3. Export a base64-encoded 32-byte key for the vault, for example:
 
-[`lib/generators`]: https://github.com/elight/acts_as_commentable_with_threading/tree/master/lib/generators
+       export INFRA_AGENT_VAULT_KEY="$(python - <<'PY'
+from secrets import token_bytes
+import base64
+print(base64.b64encode(token_bytes(32)).decode())
+PY
+)"
+
+4. Run the agent:
+
+       python -m infrastructure_agent.cli --config config/infrastructure_agent.yml
+
+Pass `--dashboard` to also expose an HTTP endpoint (default `0.0.0.0:8020/status`) that returns the latest task state as JSON.
+Use `--dump-status` to print a complete status snapshot to STDOUT when the run completes.
+
+### Configuration structure
+
+The sample configuration demonstrates the supported keys:
+
+* `runtime` – Defines the working directory for generated files, the log destination, and optional dashboard host/port values.
+* `inventory.collectors` – Ordered list of discovery plugins.  The built-in `environment` collector exports specific variables,
+  while the `host` collector captures the hostname and platform data.
+* `vault` – Enables secret storage, selects the filename for encrypted data, and specifies the environment variable that carries
+  the encryption key (base64 encoding is supported out of the box).
+* `backups.targets` – Declares backup destinations.  The provided `local` target can archive directories into timestamped tarballs
+  and applies configurable retention policies.
+
+### Observability and logs
+
+Logs are written to the file defined in `runtime.log_file` and summarised on STDOUT when the agent exits.  When the dashboard is
+enabled, visit `http://<host>:<port>/status` to fetch the latest status payload, including task timings and outcomes.
+
+### Testing
+
+The toolkit's standard library implementation means there are no runtime dependencies beyond Python itself.  For development,
+install `pytest` and run the automated checks:
+
+```
+python -m pip install --upgrade pip pytest
+python -m pytest -q
+```
+
+### Container usage
+
+Because the toolkit has no external dependencies, containerising the agent is straightforward: copy the `infrastructure_agent/`
+package and your configuration into an image built from a lightweight Python base, set the `INFRA_AGENT_VAULT_KEY`, and invoke
+the CLI described above as the container's entrypoint.
 
 Usage
 -----

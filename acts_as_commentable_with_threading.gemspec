@@ -9,7 +9,6 @@ Gem::Specification.new do |s|
   s.authors  = ["Evan Light", "Jack Dempsey", "Xelipe", "xxx"]
   s.files    = `git ls-files`.split("\n")
   s.test_files = `git ls-files -- spec/*`.split("\n")
-
   s.add_development_dependency 'rake'
   s.add_development_dependency 'rspec', '>= 3.0'
   s.add_development_dependency 'rails', '>= 4.0'

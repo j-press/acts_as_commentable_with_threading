@@ -1,0 +1,33 @@
+runtime:
+  work_dir: tmp/infrastructure_agent
+  log_file: log/infrastructure_agent.log
+  dashboard:
+    host: 0.0.0.0
+    port: 8020
+
+inventory:
+  collectors:
+    - type: environment
+      include:
+        - PATH
+        - HOME
+        - SHELL
+        - USER
+    - type: host
+
+vault:
+  enabled: true
+  file: vault.json
+  key_env: INFRA_AGENT_VAULT_KEY
+  encoding: base64
+
+backups:
+  targets:
+    - type: local
+      name: infrastructure-state
+      source:
+        - config
+      destination: tmp/infrastructure_agent/backups
+      archive: true
+      retention:
+        max_files: 5
